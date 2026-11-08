@@ -1,24 +1,29 @@
 name: Build private Athlys Android APK (public runner)
 on:
   workflow_dispatch:
-    inputs:
-      source_ref:
-        description: "Branche Athlys2 à compiler"
-        required: true
-        default: "feat/015-android-login-loading-motion"
-        type: string
 permissions:
   contents: read
 jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 40
+    env:
+      ATHLYS_UPLOAD_ENABLED: ${{ secrets.ATHLYS_PRIVATE_UPLOAD_TOKEN != '' }}
     steps:
+      - name: Verify private source access secret
+        env:
+          ATHLYS_READ_TOKEN: ${{ secrets.ATHLYS_READ_TOKEN }}
+        run: |
+          if [ -z "$ATHLYS_READ_TOKEN" ]; then
+            echo "::error title=Secret manquant::Ajoute ATHLYS_READ_TOKEN dans Settings > Secrets and variables > Actions de ce dépôt public. Le jeton doit avoir Contents: Read sur Lijw936/Athlys2."
+            exit 1
+          fi
+          echo "Le secret d'accès à la source privée est disponible."
       - name: Checkout private Athlys source
         uses: actions/checkout@v4
         with:
           repository: Lijw936/Athlys2
-          ref: ${{ inputs.source_ref }}
+          ref: feat/015-android-login-loading-motion
           token: ${{ secrets.ATHLYS_READ_TOKEN }}
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -340,12 +345,47 @@ jobs:
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
+      - name: Verify APK and calculate checksum
+        run: |
+          APK="android/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$APK"
+          file "$APK"
+          sha256sum "$APK"
+          echo "APK de test compilée. Aucun fichier binaire n'est publié dans ce dépôt public."
+      - name: Upload APK to a private draft release
+        if: env.ATHLYS_UPLOAD_ENABLED == 'true'
+        uses: actions/github-script@v7
         with:
-          name: athlys2-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
-          retention-days: 30
-      - name: Prepare stable Android download
-        run: cp android/app/build/outputs/apk/debug/app-debug.apk Athlys-Android.apk
+          github-token: ${{ secrets.ATHLYS_PRIVATE_UPLOAD_TOKEN }}
+          script: |
+            const fs = require('node:fs');
+            const owner = 'Lijw936';
+            const repo = 'Athlys2';
+            const apkPath = 'android/app/build/outputs/apk/debug/app-debug.apk';
+            const stat = fs.statSync(apkPath);
+            const release = await github.rest.repos.createRelease({
+              owner,
+              repo,
+              tag_name: `athlys-android-1.3.8-validation-${context.run_id}`,
+              target_commitish: 'feat/015-android-login-loading-motion',
+              name: 'Athlys Android 1.3.8 — validation privée',
+              body: 'APK debug de validation interne. Écran de connexion et loader animés. Cette release reste en brouillon dans le dépôt privé Athlys2 ; elle n’est pas destinée à la distribution publique.',
+              draft: true,
+              prerelease: true
+            });
+            await github.rest.repos.uploadReleaseAsset({
+              owner,
+              repo,
+              release_id: release.data.id,
+              name: 'Athlys-Android-1.3.8-debug.apk',
+              data: fs.readFileSync(apkPath),
+              headers: {
+                'content-type': 'application/vnd.android.package-archive',
+                'content-length': stat.size
+              }
+            });
+            core.notice('APK ajoutée à une release brouillon privée : ' + release.data.html_url);
+      - name: Explain private artifact destination
+        if: env.ATHLYS_UPLOAD_ENABLED != 'true'
+        run: |
+          echo "::notice::Compilation terminée, mais l'APK reste temporaire sur le runner. Pour la récupérer sans exposer le binaire, ajoute ATHLYS_PRIVATE_UPLOAD_TOKEN (Contents: write sur Lijw936/Athlys2) aux secrets de ce dépôt."
