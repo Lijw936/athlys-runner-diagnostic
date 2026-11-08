@@ -1,0 +1,29 @@
+name: Runner diagnostic
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runner-check:
+    name: Verify GitHub-hosted runner allocation
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Confirm runner allocation
+        run: |
+          echo "GitHub Actions runner allocated successfully"
+          echo "Runner OS: $RUNNER_OS"
+          echo "Runner architecture: $RUNNER_ARCH"
+          echo "Runner name: $RUNNER_NAME"
+          uname -a
+      - name: Check basic tools
+        run: |
+          node --version
+          npm --version
+      - name: Finish diagnostic
+        run: echo "RUNNER_DIAGNOSTIC_OK"
