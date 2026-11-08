@@ -1,6 +1,8 @@
 name: Build private Athlys Android APK (public runner)
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
 permissions:
   contents: read
 jobs:
