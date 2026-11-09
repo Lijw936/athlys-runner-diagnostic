@@ -1,4 +1,5 @@
 name: Athlys server Quantum runtime checks
+# Re-run after correcting wasm-pack Cargo flag forwarding.
 
 on:
   workflow_dispatch:
