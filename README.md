@@ -28,9 +28,9 @@ To also display the result on the private Athlys2 commit, add an Actions secret 
 
 `.github/workflows/athlys-desktop-private-packages.yml` builds the selected private Athlys2 ref on independent Linux, Windows and macOS runners:
 
-- Linux: Rust native/WASM tests, Scala JVM and Scala.js checks, and JavaScript regression tests.
-- Windows: NSIS installer and portable x64 executable; both must be present and at most 250 MiB.
-- macOS: ARM64 and x64 DMG + ZIP; all four outputs must be present and at most 250 MiB.
+- Linux: server-only Quantum contract tests and Electron shell syntax checks. Rust/Scala server modules will be added to this job when Feature 031 implements them; no compute runtime is installed in Desktop.
+- Windows: Electron NSIS installer and portable x64 executable; both must be present and at most 250 MiB.
+- macOS: Electron ARM64 and x64 DMG + ZIP; all four outputs must be present and at most 250 MiB.
 - The workflow is triggered when its definition changes on this repository's `main` branch and can be manually dispatched with a source ref.
 - Only non-sensitive size/SHA-256 manifests are uploaded to this public runner. Application binaries are never uploaded here.
 - If `ATHLYS_PRIVATE_UPLOAD_TOKEN` is configured with Contents: Write limited to `Lijw936/Athlys2`, each platform's binaries are uploaded to a **private draft release** in Athlys2. Without that optional secret, the builds and checks still run, but the binaries remain temporary on the runner.
