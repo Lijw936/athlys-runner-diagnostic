@@ -1,4 +1,5 @@
 name: Athlys private Desktop packages
+# Re-run after Rust kernel ownership fix on Athlys2 feature branch.
 
 on:
   workflow_dispatch:
