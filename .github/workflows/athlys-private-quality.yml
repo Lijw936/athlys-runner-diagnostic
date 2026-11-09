@@ -109,7 +109,7 @@ jobs:
         if: success() && steps.validated.outputs.cache-hit != 'true'
         run: |
           mkdir -p .athlys-ci-cache
-          printf '%s\\n' "${{ steps.source.outputs.sha }}" > .athlys-ci-cache/validated
+          printf '%s\n' "${{ steps.source.outputs.sha }}" > .athlys-ci-cache/validated
 
       - name: Cache successful source revision
         if: success() && steps.validated.outputs.cache-hit != 'true'
@@ -131,7 +131,7 @@ jobs:
             echo "Commit status not published: ATHLYS_PRIVATE_UPLOAD_TOKEN is unavailable."
             exit 0
           fi
-          node <<'NODE'
+          node --input-type=module <<'NODE'
           const response = await fetch(
             `https://api.github.com/repos/Lijw936/Athlys2/statuses/${process.env.ATHLYS_SOURCE_SHA}`,
             {
