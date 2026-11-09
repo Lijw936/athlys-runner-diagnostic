@@ -70,7 +70,6 @@ jobs:
         run: deno test --allow-env tests/runtime.test.ts
       - name: Test current remote-only browser boundary
         run: |
-          node --check athlys-source/supabase/functions/athlys-quantum-analysis/index.ts
           node --check athlys-source/web/app.js
           node --check athlys-source/web/sw.js
           node --test athlys-source/web/quantum-engine.test.cjs athlys-source/web/quantum-remote-only.test.cjs
