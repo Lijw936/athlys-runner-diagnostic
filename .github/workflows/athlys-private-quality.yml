@@ -118,6 +118,47 @@ jobs:
           path: .athlys-ci-cache/validated
           key: athlys-web-quality-${{ steps.source.outputs.sha }}
 
+      - name: Publish validation status to private Athlys2 commit
+        if: always() && steps.source.outputs.sha != ''
+        continue-on-error: true
+        env:
+          ATHLYS_STATUS_TOKEN: ${{ secrets.ATHLYS_PRIVATE_UPLOAD_TOKEN }}
+          ATHLYS_SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          ATHLYS_JOB_STATUS: ${{ job.status }}
+          ATHLYS_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ -z "$ATHLYS_STATUS_TOKEN" ]; then
+            echo "Commit status not published: ATHLYS_PRIVATE_UPLOAD_TOKEN is unavailable."
+            exit 0
+          fi
+          node --input-type=module <<'NODE'
+          const response = await fetch(
+            `https://api.github.com/repos/Lijw936/Athlys2/statuses/${process.env.ATHLYS_SOURCE_SHA}`,
+            {
+              method: 'POST',
+              headers: {
+                authorization: `Bearer ${process.env.ATHLYS_STATUS_TOKEN}`,
+                accept: 'application/vnd.github+json',
+                'content-type': 'application/json',
+                'x-github-api-version': '2022-11-28'
+              },
+              body: JSON.stringify({
+                state: process.env.ATHLYS_JOB_STATUS === 'success' ? 'success' : 'failure',
+                context: 'athlys/independent-quality',
+                description: process.env.ATHLYS_JOB_STATUS === 'success'
+                  ? 'Athlys quality validated by independent runner'
+                  : 'Athlys quality validation failed on independent runner',
+                target_url: process.env.ATHLYS_RUN_URL
+              })
+            }
+          );
+          const body = await response.text();
+          if (!response.ok) {
+            throw new Error(`GitHub commit-status API returned ${response.status}: ${body}`);
+          }
+          console.log('Published independent quality status to the private source commit.');
+          NODE
+
       - name: Report source revision
         if: always()
         run: |
