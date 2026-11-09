@@ -1,3 +1,4 @@
+# Independent quality runner for the private Athlys2 source repository
 name: Athlys private source quality
 
 on:
