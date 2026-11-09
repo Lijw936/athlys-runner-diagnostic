@@ -1,0 +1,54 @@
+name: Athlys public vitrine checks
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/athlys-vitrine-check.yml"
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "Private Athlys2 branch, tag, or commit to verify"
+        required: true
+        type: string
+        default: "feat/athlys-palantir-editorial-refresh"
+permissions:
+  contents: read
+jobs:
+  vitrine:
+    name: Public vitrine regression checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Require private source read credential
+        env:
+          ATHLYS_READ_TOKEN: ${{ secrets.ATHLYS_READ_TOKEN }}
+        run: |
+          if [ -z "$ATHLYS_READ_TOKEN" ]; then
+            echo "::error::Missing ATHLYS_READ_TOKEN (Contents: Read on Lijw936/Athlys2)."
+            exit 1
+          fi
+      - name: Checkout runner repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          path: runner
+      - name: Checkout private Athlys source
+        uses: actions/checkout@v4
+        with:
+          repository: Lijw936/Athlys2
+          ref: ${{ github.event.inputs.source_ref || 'feat/athlys-palantir-editorial-refresh' }}
+          token: ${{ secrets.ATHLYS_READ_TOKEN }}
+          persist-credentials: false
+          path: athlys-source
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Verify source revision
+        run: |
+          echo "Athlys2 source SHA: $(git -C athlys-source rev-parse HEAD)" >> "$GITHUB_STEP_SUMMARY"
+      - name: Check vitrine JavaScript syntax
+        working-directory: athlys-source
+        run: node --check web/site.js
+      - name: Run vitrine regression suite
+        working-directory: athlys-source
+        run: node --test web/site-vitrine.test.cjs
