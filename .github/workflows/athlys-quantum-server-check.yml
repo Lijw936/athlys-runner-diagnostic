@@ -1,0 +1,81 @@
+name: Athlys server Quantum runtime checks
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "Private Athlys2 branch, tag, or commit"
+        required: true
+        type: string
+        default: "feat/athlys-rust-scala-server-side"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/athlys-quantum-server-check.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  server-runtime:
+    name: Rust WASM + Scala.js + Deno parity
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Require read-only private source credential
+        env:
+          ATHLYS_READ_TOKEN: ${{ secrets.ATHLYS_READ_TOKEN }}
+        run: |
+          if [ -z "$ATHLYS_READ_TOKEN" ]; then
+            echo "::error::Missing ATHLYS_READ_TOKEN (Contents: Read on Lijw936/Athlys2)."
+            exit 1
+          fi
+      - name: Checkout private Athlys source
+        uses: actions/checkout@v4
+        with:
+          repository: Lijw936/Athlys2
+          ref: ${{ github.event.inputs.source_ref || 'feat/athlys-rust-scala-server-side' }}
+          token: ${{ secrets.ATHLYS_READ_TOKEN }}
+          persist-credentials: false
+          path: athlys-source
+      - name: Record exact private source revision
+        id: source
+        run: echo "sha=$(git -C athlys-source rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: sbt
+      - uses: sbt/setup-sbt@v1
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: denoland/setup-deno@v2
+        with:
+          deno-version: v1.46.3
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked
+      - name: Test native Rust kernel
+        run: cargo test --locked --manifest-path athlys-source/supabase/functions/athlys-quantum-analysis/rust-core/Cargo.toml
+      - name: Build Rust WASM and Scala.js server modules
+        run: bash athlys-source/supabase/functions/athlys-quantum-analysis/scripts/build-runtimes.sh
+      - name: Type-check Edge Function module graph
+        working-directory: athlys-source/supabase/functions/athlys-quantum-analysis
+        run: deno check index.ts
+      - name: Test Scala validation, Scala scenario planning and Rust/JS parity
+        working-directory: athlys-source/supabase/functions/athlys-quantum-analysis
+        run: deno test --allow-env tests/runtime.test.ts
+      - name: Test current remote-only browser boundary
+        run: |
+          node --check athlys-source/supabase/functions/athlys-quantum-analysis/index.ts
+          node --check athlys-source/web/app.js
+          node --check athlys-source/web/sw.js
+          node --test athlys-source/web/quantum-engine.test.cjs athlys-source/web/quantum-remote-only.test.cjs
+      - name: Publish source revision and test summary
+        if: always()
+        run: |
+          echo "Athlys2 source SHA: ${{ steps.source.outputs.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "This workflow runs against private source and publishes no application files or binaries." >> "$GITHUB_STEP_SUMMARY"
