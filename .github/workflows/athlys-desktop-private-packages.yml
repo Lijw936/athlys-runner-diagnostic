@@ -1,0 +1,336 @@
+name: Athlys private Desktop packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: "Athlys2 branch, tag, or commit to build"
+        required: true
+        type: string
+        default: "feat/quantum-desktop-scala-rust-transition"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/athlys-desktop-private-packages.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: athlys-desktop-private-packages
+  cancel-in-progress: false
+
+env:
+  ATHLYS_UPLOAD_ENABLED: ${{ secrets.ATHLYS_PRIVATE_UPLOAD_TOKEN != '' }}
+
+jobs:
+  linux-verification:
+    name: Verify Rust, Scala and JavaScript on Linux
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Verify private source access secret
+        env:
+          ATHLYS_READ_TOKEN: ${{ secrets.ATHLYS_READ_TOKEN }}
+        run: |
+          if [ -z "$ATHLYS_READ_TOKEN" ]; then
+            echo "::error::Missing ATHLYS_READ_TOKEN. It must have Contents: Read on Lijw936/Athlys2."
+            exit 1
+          fi
+      - name: Checkout private Athlys source
+        uses: actions/checkout@v4
+        with:
+          repository: Lijw936/Athlys2
+          ref: ${{ github.event.inputs.source_ref || 'feat/quantum-desktop-scala-rust-transition' }}
+          token: ${{ secrets.ATHLYS_READ_TOKEN }}
+          persist-credentials: false
+          path: athlys-source
+      - name: Identify source revision
+        id: source
+        run: echo "sha=$(git -C athlys-source rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: sbt
+      - uses: sbt/setup-sbt@v1
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked
+      - name: Test Rust native kernel
+        run: cargo test --locked --manifest-path athlys-source/desktop/native/athlys-quantum-core/Cargo.toml
+      - name: Install Desktop dependencies
+        working-directory: athlys-source/desktop
+        run: npm install --no-audit --no-fund
+      - name: Run JavaScript regression and platform checks
+        working-directory: athlys-source/desktop
+        run: npm run check
+      - name: Build and test Rust/WASM runtime
+        working-directory: athlys-source/desktop
+        run: |
+          npm run build:quantum:wasm
+          node --test native/athlys-quantum-core/tests/wasm-parity.test.mjs
+      - name: Build and test Scala.js runtime
+        working-directory: athlys-source/desktop
+        run: |
+          npm run build:scala:js
+          npm run test:scala:js
+      - name: Compile and test Scala JVM domain
+        working-directory: athlys-source/desktop/scala/athlys-domain
+        run: sbt -batch clean test
+      - name: Report exact source revision
+        if: always()
+        run: |
+          echo "Athlys2 source SHA: ${{ steps.source.outputs.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "This independent runner validates private source without publishing application files." >> "$GITHUB_STEP_SUMMARY"
+
+  windows-package:
+    name: Build Windows NSIS and portable x64
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Verify private source access secret
+        shell: pwsh
+        env:
+          ATHLYS_READ_TOKEN: ${{ secrets.ATHLYS_READ_TOKEN }}
+        run: |
+          if (-not $env:ATHLYS_READ_TOKEN) {
+            throw "Missing ATHLYS_READ_TOKEN with Contents: Read on Lijw936/Athlys2."
+          }
+      - name: Checkout private Athlys source
+        uses: actions/checkout@v4
+        with:
+          repository: Lijw936/Athlys2
+          ref: ${{ github.event.inputs.source_ref || 'feat/quantum-desktop-scala-rust-transition' }}
+          token: ${{ secrets.ATHLYS_READ_TOKEN }}
+          persist-credentials: false
+          path: athlys-source
+      - name: Identify source revision
+        id: source
+        shell: pwsh
+        run: |
+          $sha = git -C athlys-source rev-parse HEAD
+          "sha=$sha" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: sbt
+      - uses: sbt/setup-sbt@v1
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install wasm-pack
+        shell: pwsh
+        run: cargo install wasm-pack --locked
+      - name: Install Desktop dependencies
+        working-directory: athlys-source/desktop
+        run: npm install --no-audit --no-fund
+      - name: Build Windows installer and portable app
+        working-directory: athlys-source/desktop
+        run: npm run dist
+      - name: Verify both outputs and enforce 250 MiB ceiling
+        shell: pwsh
+        run: |
+          $artifacts = @(Get-ChildItem athlys-source/desktop/dist/*.exe -File)
+          $installer = @($artifacts | Where-Object { $_.Name -notmatch 'Portable' })
+          $portable = @($artifacts | Where-Object { $_.Name -match 'Portable' })
+          if ($installer.Count -lt 1 -or $portable.Count -lt 1) {
+            throw "Both NSIS and portable executables are required. Found: $($artifacts.Name -join ', ')"
+          }
+          foreach ($artifact in $artifacts) {
+            if ($artifact.Length -gt 250MB) {
+              throw "$($artifact.Name) exceeds 250 MiB."
+            }
+            Write-Host "$($artifact.Name): $([math]::Round($artifact.Length / 1MB, 2)) MiB"
+          }
+          New-Item -ItemType Directory -Force -Path manifests | Out-Null
+          $manifest = foreach ($artifact in $artifacts) {
+            [PSCustomObject]@{
+              name = $artifact.Name
+              bytes = $artifact.Length
+              sha256 = (Get-FileHash $artifact.FullName -Algorithm SHA256).Hash
+            }
+          }
+          [PSCustomObject]@{
+            source_sha = "${{ steps.source.outputs.sha }}"
+            platform = "windows-x64"
+            artifacts = @($manifest)
+          } | ConvertTo-Json -Depth 5 | Set-Content manifests/windows.json
+      - name: Upload non-sensitive build manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: athlys-desktop-windows-manifest
+          path: manifests/windows.json
+          if-no-files-found: error
+      - name: Upload binaries to a private Athlys2 draft release
+        if: env.ATHLYS_UPLOAD_ENABLED == 'true'
+        uses: actions/github-script@v7
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        with:
+          github-token: ${{ secrets.ATHLYS_PRIVATE_UPLOAD_TOKEN }}
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const owner = 'Lijw936';
+            const repo = 'Athlys2';
+            const dir = 'athlys-source/desktop/dist';
+            const files = fs.readdirSync(dir).filter(name => name.toLowerCase().endsWith('.exe'));
+            const release = await github.rest.repos.createRelease({
+              owner, repo,
+              tag_name: `athlys-desktop-windows-${context.run_id}-${context.run_attempt}`,
+              target_commitish: process.env.SOURCE_SHA,
+              name: `Athlys Desktop Windows validation — ${context.run_id}`,
+              body: `Private, unpublished validation packages built from ${process.env.SOURCE_SHA}. Not for public distribution.`,
+              draft: true,
+              prerelease: true
+            });
+            for (const name of files) {
+              const file = path.join(dir, name);
+              const stat = fs.statSync(file);
+              await github.rest.repos.uploadReleaseAsset({
+                owner, repo, release_id: release.data.id, name,
+                data: fs.readFileSync(file),
+                headers: { 'content-type': 'application/octet-stream', 'content-length': stat.size }
+              });
+            }
+            core.notice('Windows packages stored in a private draft release: ' + release.data.html_url);
+      - name: Explain private binary destination
+        if: env.ATHLYS_UPLOAD_ENABLED != 'true'
+        run: |
+          echo "Build verified; binary upload skipped because ATHLYS_PRIVATE_UPLOAD_TOKEN is not configured." >> "$env:GITHUB_STEP_SUMMARY"
+          echo "No Athlys binaries were uploaded to this public runner repository." >> "$env:GITHUB_STEP_SUMMARY"
+
+  macos-package:
+    name: Build macOS ARM64 and x64 DMG/ZIP
+    runs-on: macos-latest
+    timeout-minutes: 75
+    steps:
+      - name: Verify private source access secret
+        env:
+          ATHLYS_READ_TOKEN: ${{ secrets.ATHLYS_READ_TOKEN }}
+        run: |
+          if [ -z "$ATHLYS_READ_TOKEN" ]; then
+            echo "::error::Missing ATHLYS_READ_TOKEN with Contents: Read on Lijw936/Athlys2."
+            exit 1
+          fi
+      - name: Checkout private Athlys source
+        uses: actions/checkout@v4
+        with:
+          repository: Lijw936/Athlys2
+          ref: ${{ github.event.inputs.source_ref || 'feat/quantum-desktop-scala-rust-transition' }}
+          token: ${{ secrets.ATHLYS_READ_TOKEN }}
+          persist-credentials: false
+          path: athlys-source
+      - name: Identify source revision
+        id: source
+        run: echo "sha=$(git -C athlys-source rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: sbt
+      - uses: sbt/setup-sbt@v1
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Install wasm-pack
+        run: cargo install wasm-pack --locked
+      - name: Install Desktop dependencies
+        working-directory: athlys-source/desktop
+        run: npm install --no-audit --no-fund
+      - name: Build both macOS architectures using the project script
+        working-directory: athlys-source/desktop
+        run: npm run dist:mac
+      - name: Verify all four outputs and enforce 250 MiB ceiling
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          artifacts=(athlys-source/desktop/dist/*.dmg athlys-source/desktop/dist/*.zip)
+          if [ "${#artifacts[@]}" -ne 4 ]; then
+            echo "::error::Expected exactly four packages (ARM64/x64 DMG+ZIP), found ${#artifacts[@]}"
+            printf '%s\n' "${artifacts[@]}"
+            exit 1
+          fi
+          for arch in arm64 x64; do
+            for ext in dmg zip; do
+              matches=(athlys-source/desktop/dist/*-${arch}.${ext})
+              if [ "${#matches[@]}" -ne 1 ]; then
+                echo "::error::Missing or duplicate ${arch} ${ext} package"
+                exit 1
+              fi
+            done
+          done
+          mkdir -p manifests
+          printf '{"source_sha":"%s","platform":"macos-arm64-x64","artifacts":[' "${{ steps.source.outputs.sha }}" > manifests/macos.json
+          first=true
+          for artifact in "${artifacts[@]}"; do
+            bytes=$(stat -f%z "$artifact")
+            if [ "$bytes" -gt 262144000 ]; then
+              echo "::error file=$artifact::Artifact exceeds 250 MiB"
+              exit 1
+            fi
+            sha=$(shasum -a 256 "$artifact" | awk '{print $1}')
+            name=$(basename "$artifact")
+            printf '%s{"name":"%s","bytes":%s,"sha256":"%s"}' "$([ "$first" = true ] || printf ',')" "$name" "$bytes" "$sha" >> manifests/macos.json
+            first=false
+            echo "$name: $(awk -v bytes="$bytes" 'BEGIN { printf "%.2f MiB", bytes / 1048576 }')"
+          done
+          printf ']}\n' >> manifests/macos.json
+      - name: Upload non-sensitive build manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: athlys-desktop-macos-manifest
+          path: manifests/macos.json
+          if-no-files-found: error
+      - name: Upload binaries to a private Athlys2 draft release
+        if: env.ATHLYS_UPLOAD_ENABLED == 'true'
+        uses: actions/github-script@v7
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        with:
+          github-token: ${{ secrets.ATHLYS_PRIVATE_UPLOAD_TOKEN }}
+          script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const owner = 'Lijw936';
+            const repo = 'Athlys2';
+            const dir = 'athlys-source/desktop/dist';
+            const files = fs.readdirSync(dir).filter(name => /\.(dmg|zip)$/i.test(name));
+            const release = await github.rest.repos.createRelease({
+              owner, repo,
+              tag_name: `athlys-desktop-macos-${context.run_id}-${context.run_attempt}`,
+              target_commitish: process.env.SOURCE_SHA,
+              name: `Athlys Desktop macOS validation — ${context.run_id}`,
+              body: `Private, unpublished ARM64/x64 validation packages built from ${process.env.SOURCE_SHA}. Not for public distribution.`,
+              draft: true,
+              prerelease: true
+            });
+            for (const name of files) {
+              const file = path.join(dir, name);
+              const stat = fs.statSync(file);
+              await github.rest.repos.uploadReleaseAsset({
+                owner, repo, release_id: release.data.id, name,
+                data: fs.readFileSync(file),
+                headers: { 'content-type': name.endsWith('.dmg') ? 'application/x-apple-diskimage' : 'application/zip', 'content-length': stat.size }
+              });
+            }
+            core.notice('macOS packages stored in a private draft release: ' + release.data.html_url);
+      - name: Explain private binary destination
+        if: env.ATHLYS_UPLOAD_ENABLED != 'true'
+        run: |
+          echo "Build verified; binary upload skipped because ATHLYS_PRIVATE_UPLOAD_TOKEN is not configured." >> "$GITHUB_STEP_SUMMARY"
+          echo "No Athlys binaries were uploaded to this public runner repository." >> "$GITHUB_STEP_SUMMARY"
