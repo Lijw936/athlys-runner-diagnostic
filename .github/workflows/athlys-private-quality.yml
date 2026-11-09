@@ -122,13 +122,13 @@ jobs:
         if: always() && steps.source.outputs.sha != ''
         continue-on-error: true
         env:
-          ATHLYS_STATUS_TOKEN: ${{ secrets.ATHLYS_PRIVATE_UPLOAD_TOKEN }}
+          ATHLYS_STATUS_TOKEN: ${{ secrets.ATHLYS_STATUS_TOKEN }}
           ATHLYS_SOURCE_SHA: ${{ steps.source.outputs.sha }}
           ATHLYS_JOB_STATUS: ${{ job.status }}
           ATHLYS_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           if [ -z "$ATHLYS_STATUS_TOKEN" ]; then
-            echo "Commit status not published: ATHLYS_PRIVATE_UPLOAD_TOKEN is unavailable."
+            echo "Independent validation remains available in this runner repository; optional source-commit status mirroring is not configured." >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           node --input-type=module <<'NODE'
