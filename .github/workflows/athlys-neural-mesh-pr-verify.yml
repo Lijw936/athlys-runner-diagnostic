@@ -6,7 +6,7 @@ on:
       source_ref:
         description: Private Athlys2 branch or commit to verify
         required: false
-        default: feat/032-athlys-neural-mesh-mainline
+        default: main
         type: string
   schedule:
     - cron: "*/15 * * * *"
@@ -26,15 +26,15 @@ jobs:
   verify:
     name: Verify private Athlys Neural Mesh source
     runs-on: ubuntu-24.04
-    timeout-minutes: 34
+    timeout-minutes: 35
     env:
-      SOURCE_REF: ${{ inputs.source_ref || 'feat/032-athlys-neural-mesh-mainline' }}
+      SOURCE_REF: ${{ inputs.source_ref || 'main' }}
     steps:
       - name: Checkout private Athlys2 feature ref
         uses: actions/checkout@v4
         with:
           repository: Lijw936/Athlys2
-          ref: ${{ inputs.source_ref || 'feat/032-athlys-neural-mesh-mainline' }}
+          ref: ${{ inputs.source_ref || 'main' }}
           token: ${{ secrets.ATHLYS_READ_TOKEN }}
           persist-credentials: false
 
