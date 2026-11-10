@@ -1,0 +1,109 @@
+name: Athlys Neural Mesh independent PR verification
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Private Athlys2 branch or commit to verify
+        required: false
+        default: feat/032-athlys-neural-mesh
+        type: string
+  schedule:
+    - cron: "*/15 * * * *"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/athlys-neural-mesh-pr-verify.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: athlys-neural-mesh-independent-verification
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Verify private Athlys Neural Mesh source
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      SOURCE_REF: ${{ inputs.source_ref || 'feat/032-athlys-neural-mesh' }}
+    steps:
+      - name: Checkout private Athlys2 feature ref
+        uses: actions/checkout@v4
+        with:
+          repository: Lijw936/Athlys2
+          ref: ${{ inputs.source_ref || 'feat/032-athlys-neural-mesh' }}
+          token: ${{ secrets.ATHLYS_READ_TOKEN }}
+          persist-credentials: false
+
+      - name: Identify exact source revision
+        id: source
+        run: |
+          SHA="$(git rev-parse HEAD)"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "ref=$SOURCE_REF" >> "$GITHUB_OUTPUT"
+          echo "Verifying $SOURCE_REF at $SHA"
+
+      - name: Restore successful validation marker
+        id: validated
+        uses: actions/cache/restore@v4
+        with:
+          path: .athlys-ci-cache/neural-mesh-validated
+          key: athlys-neural-mesh-${{ steps.source.outputs.sha }}
+
+      - name: Set up Node.js 22
+        if: steps.validated.outputs.cache-hit != 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: services/athlys-remote-ai/package-lock.json
+
+      - name: Check Neural Mesh module and Edge Function source
+        if: steps.validated.outputs.cache-hit != 'true'
+        run: |
+          node --check supabase/functions/_shared/athlys-neural-mesh.mjs
+          node --test services/athlys-remote-ai/test/neural-mesh.test.mjs
+          node --check supabase/functions/athlys-assistant/index.ts
+
+      - name: Install locked remote gateway dependencies
+        if: steps.validated.outputs.cache-hit != 'true'
+        working-directory: services/athlys-remote-ai
+        run: npm ci
+
+      - name: Run complete remote AI gateway verification
+        if: steps.validated.outputs.cache-hit != 'true'
+        working-directory: services/athlys-remote-ai
+        run: npm run verify
+
+      - name: Run web and privacy regression checks
+        if: steps.validated.outputs.cache-hit != 'true'
+        run: |
+          node --check web/app.js
+          node --test web/assistant-remote-only.test.cjs
+          node --test web/mobile-experience.test.cjs
+          node -e "JSON.parse(require('fs').readFileSync('package.json','utf8'))"
+          node -e "JSON.parse(require('fs').readFileSync('capacitor.config.json','utf8'))"
+
+      - name: Store successful validation marker
+        if: success() && steps.validated.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p .athlys-ci-cache
+          printf '%s\n' "${{ steps.source.outputs.sha }}" > .athlys-ci-cache/neural-mesh-validated
+
+      - name: Cache exact successful source revision
+        if: success() && steps.validated.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .athlys-ci-cache/neural-mesh-validated
+          key: athlys-neural-mesh-${{ steps.source.outputs.sha }}
+
+      - name: Publish verification summary
+        if: always()
+        run: |
+          echo "## Athlys Neural Mesh independent verification" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Source ref: $SOURCE_REF" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Source SHA: ${{ steps.source.outputs.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Result: ${{ job.status }}" >> "$GITHUB_STEP_SUMMARY"
