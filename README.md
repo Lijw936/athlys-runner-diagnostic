@@ -21,10 +21,10 @@ The public runner's Actions result is the authoritative CI result while native A
 
 - Checks out `Lijw936/Athlys2@feat/032-athlys-neural-mesh` by default; manual dispatch accepts another private ref.
 - Uses the read-only `ATHLYS_READ_TOKEN` and `persist-credentials: false`; no source or checkout credentials are published.
-- Runs Node 22 syntax checks, targeted Neural Mesh tests, the full remote-AI gateway verification, Deno 2 Edge Function type-checking, and feature-branch web/privacy/PWA regression checks.
+- Runs the root release contract and browser-bundle build, Node 22 syntax and gateway tests, targeted Neural Mesh tests, Deno 2 Edge Function type-checking, Python learning-factory tests, Docker image build, and feature-branch web/privacy/PWA regression checks.
 - Polls every 15 minutes and caches successful results by exact source SHA and workflow definition hash, so changing the validation gates forces a fresh run.
-- Latest successful run: https://github.com/Lijw936/athlys-runner-diagnostic/actions/runs/42734976354
-- Validated private source SHA: `58ccadc43409676e6b5a1de29aa438e3a2874206`.
+- Latest successful run: https://github.com/Lijw936/athlys-runner-diagnostic/actions/runs/42735379348
+- Validated private source SHA: `ab727111705035756b9cc795d6eb55a4388fd60b`.
 
 This is the active CI authority for the feature branch until the native private-repository Actions dispatcher is repaired. It does not deploy to production or activate external inference.
 
