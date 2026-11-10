@@ -26,7 +26,7 @@ jobs:
   verify:
     name: Verify private Athlys Neural Mesh source
     runs-on: ubuntu-24.04
-    timeout-minutes: 27
+    timeout-minutes: 28
     env:
       SOURCE_REF: ${{ inputs.source_ref || 'feat/032-athlys-neural-mesh' }}
     steps:
@@ -68,6 +68,20 @@ jobs:
           node --check services/athlys-remote-ai/api/chat.mjs
           node --test services/athlys-remote-ai/test/neural-mesh.test.mjs
           node --check supabase/functions/athlys-assistant/index.ts
+
+      - name: Install root application build dependencies
+        if: steps.validated.outputs.cache-hit != 'true'
+        run: npm install --no-audit --no-fund
+
+      - name: Run remote-only release contract
+        if: steps.validated.outputs.cache-hit != 'true'
+        run: |
+          node --check scripts/verify-release.cjs
+          npm run verify:release
+
+      - name: Build web and native browser bundles
+        if: steps.validated.outputs.cache-hit != 'true'
+        run: npm run build:web
 
       - name: Set up Deno for Supabase Edge Function type checking
         if: steps.validated.outputs.cache-hit != 'true'
