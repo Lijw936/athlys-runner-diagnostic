@@ -69,6 +69,16 @@ jobs:
           node --test services/athlys-remote-ai/test/neural-mesh.test.mjs
           node --check supabase/functions/athlys-assistant/index.ts
 
+      - name: Set up Deno for Supabase Edge Function type checking
+        if: steps.validated.outputs.cache-hit != 'true'
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Type-check the Supabase Neural Mesh Edge Function
+        if: steps.validated.outputs.cache-hit != 'true'
+        run: deno check --no-config supabase/functions/athlys-assistant/index.ts
+
       - name: Install locked remote gateway dependencies
         if: steps.validated.outputs.cache-hit != 'true'
         working-directory: services/athlys-remote-ai
@@ -82,9 +92,28 @@ jobs:
       - name: Run web and privacy regression checks
         if: steps.validated.outputs.cache-hit != 'true'
         run: |
+          node --test web/site-vitrine.test.cjs
           node --check web/app.js
           node --test web/assistant-remote-only.test.cjs
           node --test web/mobile-experience.test.cjs
+          node scripts/check-android-1.3.7-download.cjs
+          node --check supabase/functions/athlys-quantum-analysis/quantum-engine.js
+          node --test web/quantum-engine.test.cjs
+          node --test web/quantum-remote-only.test.cjs
+          node --check supabase/functions/athlys-performance-analysis/analysis-engine.js
+          node --test web/performance-engine.test.cjs
+          node --test web/performance-remote-only.test.cjs
+          node --check supabase/functions/athlys-performance-analysis/health-summary-engine.mjs
+          node --test web/health-summary-engine.test.mjs web/health-summary-remote-only.test.cjs
+          node --check web/mobile.js
+          node --check web/sw.js
+          node --check web/pwa.js
+          node --check web/offline-store.js
+          node --check web/ios-install.js
+          node --check web/site.js
+          node --check web/club.js
+          node --check desktop-club/main.cjs
+          node --check desktop-club/copy-web.cjs
           node -e "JSON.parse(require('fs').readFileSync('package.json','utf8'))"
           node -e "JSON.parse(require('fs').readFileSync('capacitor.config.json','utf8'))"
 
