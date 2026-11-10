@@ -65,6 +65,7 @@ jobs:
         if: steps.validated.outputs.cache-hit != 'true'
         run: |
           node --check supabase/functions/_shared/athlys-neural-mesh.mjs
+          node --check services/athlys-remote-ai/api/chat.mjs
           node --test services/athlys-remote-ai/test/neural-mesh.test.mjs
           node --check supabase/functions/athlys-assistant/index.ts
 
