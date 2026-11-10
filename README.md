@@ -23,8 +23,8 @@ The public runner's Actions result is the authoritative CI result while native A
 - Uses the read-only `ATHLYS_READ_TOKEN` and `persist-credentials: false`; no source or checkout credentials are published.
 - Runs the root release contract and browser-bundle build, Node 22 syntax and gateway tests, targeted Neural Mesh tests, Deno 2 Edge Function type-checking, Python learning-factory tests, Docker image build, and feature-branch web/privacy/PWA regression checks.
 - Polls every 15 minutes and caches successful results by exact source SHA and workflow definition hash, so changing the validation gates forces a fresh run.
-- Latest successful run: https://github.com/Lijw936/athlys-runner-diagnostic/actions/runs/42735379348
-- Validated private source SHA: `ab727111705035756b9cc795d6eb55a4388fd60b`.
+- Latest successful run: https://github.com/Lijw936/athlys-runner-diagnostic/actions/runs/42735872662
+- Validated private source SHA: `17c62061a6ba6e4821e33d618a5615d657847c61`.
 
 This is the active CI authority for the feature branch until the native private-repository Actions dispatcher is repaired. It does not deploy to production or activate external inference.
 
