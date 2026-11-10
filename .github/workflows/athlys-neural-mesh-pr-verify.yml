@@ -26,7 +26,7 @@ jobs:
   verify:
     name: Verify private Athlys Neural Mesh source
     runs-on: ubuntu-24.04
-    timeout-minutes: 28
+    timeout-minutes: 32
     env:
       SOURCE_REF: ${{ inputs.source_ref || 'feat/032-athlys-neural-mesh' }}
     steps:
@@ -102,6 +102,25 @@ jobs:
         if: steps.validated.outputs.cache-hit != 'true'
         working-directory: services/athlys-remote-ai
         run: npm run verify
+
+      - name: Set up Python 3.11
+        if: steps.validated.outputs.cache-hit != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Compile Athlys learning pipelines
+        if: steps.validated.outputs.cache-hit != 'true'
+        run: python -m compileall -q ml/athlys_intelligence
+
+      - name: Run Athlys learning-factory unit tests
+        if: steps.validated.outputs.cache-hit != 'true'
+        working-directory: ml
+        run: python -m unittest discover -s athlys_intelligence/tests -v
+
+      - name: Build provider-neutral gateway container
+        if: steps.validated.outputs.cache-hit != 'true'
+        run: docker build --pull -t athlys/remote-ai:ci services/athlys-remote-ai
 
       - name: Run web and privacy regression checks
         if: steps.validated.outputs.cache-hit != 'true'
