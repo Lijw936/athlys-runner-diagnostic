@@ -51,7 +51,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .athlys-ci-cache/neural-mesh-validated
-          key: athlys-neural-mesh-${{ steps.source.outputs.sha }}
+          key: athlys-neural-mesh-${{ steps.source.outputs.sha }}-${{ hashFiles('.github/workflows/athlys-neural-mesh-pr-verify.yml') }}
 
       - name: Set up Node.js 22
         if: steps.validated.outputs.cache-hit != 'true'
@@ -160,7 +160,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .athlys-ci-cache/neural-mesh-validated
-          key: athlys-neural-mesh-${{ steps.source.outputs.sha }}
+          key: athlys-neural-mesh-${{ steps.source.outputs.sha }}-${{ hashFiles('.github/workflows/athlys-neural-mesh-pr-verify.yml') }}
 
       - name: Publish verification summary
         if: always()
