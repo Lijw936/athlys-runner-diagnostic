@@ -199,8 +199,9 @@ jobs:
         uses: actions/github-script@v7
         env:
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          PUBLIC_UPLOAD_TOKEN_CONFIGURED: ${{ secrets.PUBLISH_TOKEN != '' }}
         with:
-          github-token: ${{ secrets.ATHLYS_PRIVATE_UPLOAD_TOKEN }}
+          github-token: ${{ secrets.PUBLISH_TOKEN != '' && secrets.PUBLISH_TOKEN || secrets.ATHLYS_PRIVATE_UPLOAD_TOKEN }}
           script: |
             const fs = require('node:fs');
             const crypto = require('node:crypto');
@@ -237,9 +238,9 @@ jobs:
                 owner, repo, release_id: release.id, name: 'SHA256SUMS.txt', data: manifest,
                 headers: { 'content-type': 'text/plain', 'content-length': manifest.length }
               });
-              core.notice('Public Windows release updated: ' + release.html_url);
+              core.notice('Public Windows release updated: ' + release.html_url + ' (PUBLISH_TOKEN configured=' + process.env.PUBLIC_UPLOAD_TOKEN_CONFIGURED + ')');
             } catch (error) {
-              core.warning('Public Windows release upload did not complete: ' + (error.status || '') + ' ' + error.message);
+              core.warning('Public Windows release upload did not complete (PUBLISH_TOKEN configured=' + process.env.PUBLIC_UPLOAD_TOKEN_CONFIGURED + '): ' + (error.status || '') + ' ' + error.message);
             }
       - name: Explain private binary destination
         if: env.ATHLYS_UPLOAD_ENABLED != 'true'
@@ -348,8 +349,9 @@ jobs:
         uses: actions/github-script@v7
         env:
           SOURCE_SHA: ${{ steps.source.outputs.sha }}
+          PUBLIC_UPLOAD_TOKEN_CONFIGURED: ${{ secrets.PUBLISH_TOKEN != '' }}
         with:
-          github-token: ${{ secrets.ATHLYS_PRIVATE_UPLOAD_TOKEN }}
+          github-token: ${{ secrets.PUBLISH_TOKEN != '' && secrets.PUBLISH_TOKEN || secrets.ATHLYS_PRIVATE_UPLOAD_TOKEN }}
           script: |
             const fs = require('node:fs');
             const crypto = require('node:crypto');
@@ -386,9 +388,9 @@ jobs:
                 owner, repo, release_id: release.id, name: 'SHA256SUMS.txt', data: manifest,
                 headers: { 'content-type': 'text/plain', 'content-length': manifest.length }
               });
-              core.notice('Public Athlys Club release updated: ' + release.html_url);
+              core.notice('Public Athlys Club release updated: ' + release.html_url + ' (PUBLISH_TOKEN configured=' + process.env.PUBLIC_UPLOAD_TOKEN_CONFIGURED + ')');
             } catch (error) {
-              core.warning('Public Athlys Club release upload did not complete: ' + (error.status || '') + ' ' + error.message);
+              core.warning('Public Athlys Club release upload did not complete (PUBLISH_TOKEN configured=' + process.env.PUBLIC_UPLOAD_TOKEN_CONFIGURED + '): ' + (error.status || '') + ' ' + error.message);
             }
       - name: Explain private Club binary destination
         if: env.ATHLYS_UPLOAD_ENABLED != 'true'
