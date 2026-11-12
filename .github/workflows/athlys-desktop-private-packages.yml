@@ -194,6 +194,53 @@ jobs:
               });
             }
             core.notice('Windows packages stored in a private draft release: ' + release.data.html_url);
+      - name: Publish Windows binaries to public Athlys downloads
+        if: env.ATHLYS_UPLOAD_ENABLED == 'true'
+        uses: actions/github-script@v7
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        with:
+          github-token: ${{ secrets.ATHLYS_PRIVATE_UPLOAD_TOKEN }}
+          script: |
+            const fs = require('node:fs');
+            const crypto = require('node:crypto');
+            const path = require('node:path');
+            const owner = 'Lijw936';
+            const repo = 'Athlys-downloads';
+            const tag = 'athlys-windows-latest';
+            const dir = 'athlys-source/desktop/dist';
+            const files = ['Athlys-1.2.1-x64.exe', 'Athlys-Portable-1.2.1-x64.exe'];
+            const name = 'Athlys Desktop Windows 1.2.1';
+            const body = 'Athlys Desktop Windows 1.2.1 — installateur x64 et version portable, reconstruits depuis ' + process.env.SOURCE_SHA + '. Identité visuelle harmonisée et messagerie d’équipe. Installateurs non signés ; SmartScreen peut afficher un avertissement.';
+            try {
+              let release;
+              try { release = (await github.rest.repos.getReleaseByTag({ owner, repo, tag })).data; }
+              catch (error) {
+                if (error.status !== 404) throw error;
+                release = (await github.rest.repos.createRelease({ owner, repo, tag_name: tag, target_commitish: 'main', name, body, draft: false, prerelease: false })).data;
+              }
+              for (const asset of (release.assets || []).filter(a => files.includes(a.name) || a.name === 'SHA256SUMS.txt')) {
+                await github.rest.repos.deleteReleaseAsset({ owner, repo, asset_id: asset.id });
+              }
+              release = (await github.rest.repos.updateRelease({ owner, repo, release_id: release.id, name, body, draft: false, prerelease: false })).data;
+              const sums = [];
+              for (const filename of files) {
+                const data = fs.readFileSync(path.join(dir, filename));
+                sums.push(crypto.createHash('sha256').update(data).digest('hex') + '  ' + filename);
+                await github.rest.repos.uploadReleaseAsset({
+                  owner, repo, release_id: release.id, name: filename, data,
+                  headers: { 'content-type': 'application/octet-stream', 'content-length': data.length }
+                });
+              }
+              const manifest = Buffer.from(sums.join('\n') + '\n');
+              await github.rest.repos.uploadReleaseAsset({
+                owner, repo, release_id: release.id, name: 'SHA256SUMS.txt', data: manifest,
+                headers: { 'content-type': 'text/plain', 'content-length': manifest.length }
+              });
+              core.notice('Public Windows release updated: ' + release.html_url);
+            } catch (error) {
+              core.warning('Public Windows release upload did not complete: ' + (error.status || '') + ' ' + error.message);
+            }
       - name: Explain private binary destination
         if: env.ATHLYS_UPLOAD_ENABLED != 'true'
         run: |
@@ -296,6 +343,53 @@ jobs:
               });
             }
             core.notice('Athlys Club Windows packages stored in a private draft release: ' + release.data.html_url);
+      - name: Publish Athlys Club binaries to public downloads
+        if: env.ATHLYS_UPLOAD_ENABLED == 'true'
+        uses: actions/github-script@v7
+        env:
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+        with:
+          github-token: ${{ secrets.ATHLYS_PRIVATE_UPLOAD_TOKEN }}
+          script: |
+            const fs = require('node:fs');
+            const crypto = require('node:crypto');
+            const path = require('node:path');
+            const owner = 'Lijw936';
+            const repo = 'Athlys-downloads';
+            const tag = 'athlys-club-windows-latest';
+            const dir = 'athlys-source/desktop-club/dist';
+            const files = ['Athlys-Club-1.0.1-x64.exe', 'Athlys-Club-Portable-1.0.1-x64.exe'];
+            const name = 'Athlys Club Windows 1.0.1';
+            const body = 'Athlys Club Windows 1.0.1 — installateur x64 et version portable, reconstruits depuis ' + process.env.SOURCE_SHA + '. Installateurs non signés.';
+            try {
+              let release;
+              try { release = (await github.rest.repos.getReleaseByTag({ owner, repo, tag })).data; }
+              catch (error) {
+                if (error.status !== 404) throw error;
+                release = (await github.rest.repos.createRelease({ owner, repo, tag_name: tag, target_commitish: 'main', name, body, draft: false, prerelease: false })).data;
+              }
+              for (const asset of (release.assets || []).filter(a => files.includes(a.name) || a.name === 'SHA256SUMS.txt')) {
+                await github.rest.repos.deleteReleaseAsset({ owner, repo, asset_id: asset.id });
+              }
+              release = (await github.rest.repos.updateRelease({ owner, repo, release_id: release.id, name, body, draft: false, prerelease: false })).data;
+              const sums = [];
+              for (const filename of files) {
+                const data = fs.readFileSync(path.join(dir, filename));
+                sums.push(crypto.createHash('sha256').update(data).digest('hex') + '  ' + filename);
+                await github.rest.repos.uploadReleaseAsset({
+                  owner, repo, release_id: release.id, name: filename, data,
+                  headers: { 'content-type': 'application/octet-stream', 'content-length': data.length }
+                });
+              }
+              const manifest = Buffer.from(sums.join('\n') + '\n');
+              await github.rest.repos.uploadReleaseAsset({
+                owner, repo, release_id: release.id, name: 'SHA256SUMS.txt', data: manifest,
+                headers: { 'content-type': 'text/plain', 'content-length': manifest.length }
+              });
+              core.notice('Public Athlys Club release updated: ' + release.html_url);
+            } catch (error) {
+              core.warning('Public Athlys Club release upload did not complete: ' + (error.status || '') + ' ' + error.message);
+            }
       - name: Explain private Club binary destination
         if: env.ATHLYS_UPLOAD_ENABLED != 'true'
         run: |
