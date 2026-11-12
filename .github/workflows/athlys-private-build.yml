@@ -378,7 +378,7 @@ jobs:
             const release = await github.rest.repos.createRelease({
               owner,
               repo,
-              tag_name: `athlys-android-1.3.9-validation-${context.run_id}`,
+              tag_name: `athlys-android-1.3.9-validation-${process.env.RUN_ID}-${process.env.RUN_ATTEMPT}`,
               target_commitish: '${{ github.event.inputs.source_ref || 'feat/034-athlys-team-chat-cross-platform' }}',
               name: 'Athlys Android 1.3.9 — validation privée',
               body: 'APK debug de validation interne. Messagerie d’équipe, splash natif Athlys et identité visuelle harmonisée. Cette release reste en brouillon dans le dépôt privé Athlys2 ; elle n’est pas destinée à la distribution publique.',
