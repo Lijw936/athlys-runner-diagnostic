@@ -1,4 +1,5 @@
 # Independent quality runner for the private Athlys2 source repository
+# Revalidate the latest feature branch after final splash and group-chat fixes.
 name: Athlys private source quality
 
 on:

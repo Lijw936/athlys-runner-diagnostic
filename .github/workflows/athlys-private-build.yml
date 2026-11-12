@@ -9,6 +9,8 @@ on:
         default: "feat/034-athlys-team-chat-cross-platform"
   push:
     branches: [main]
+    paths:
+      - ".github/workflows/athlys-private-build.yml"
 permissions:
   contents: read
 jobs:
