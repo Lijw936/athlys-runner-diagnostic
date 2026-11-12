@@ -19,7 +19,7 @@ permissions:
 
 concurrency:
   group: athlys-desktop-private-packages
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   ATHLYS_UPLOAD_ENABLED: ${{ secrets.ATHLYS_PRIVATE_UPLOAD_TOKEN != '' }}
