@@ -401,3 +401,4 @@ jobs:
           echo "::notice::Compilation terminée, mais l'APK reste temporaire sur le runner. Pour la récupérer sans exposer le binaire, ajoute ATHLYS_PRIVATE_UPLOAD_TOKEN (Contents: write sur Lijw936/Athlys2) aux secrets de ce dépôt."
 
 # Rebuild trigger: private upload authorization can be added without exposing APK artifacts.
+# 2026-11-12: refresh the APK after the native splash bridge and group-chat fixes.
