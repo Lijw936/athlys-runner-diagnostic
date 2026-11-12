@@ -1,5 +1,6 @@
 name: Athlys server Quantum runtime checks
 # Re-run after granting Deno narrowly scoped access to the generated WASM package.
+# Push runs validate the default Rust/Scala feature branch; manual dispatch can select source_ref.
 
 on:
   workflow_dispatch:
