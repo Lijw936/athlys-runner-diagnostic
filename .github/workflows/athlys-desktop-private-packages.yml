@@ -75,7 +75,7 @@ jobs:
         run: deno check index.ts
       - name: Run Rust/Scala to JavaScript parity fixtures in Deno
         working-directory: athlys-source/supabase/functions/athlys-quantum-analysis
-        run: deno test --allow-env tests/runtime.test.ts
+        run: deno test --allow-env --allow-read=./rust-core/pkg,./scala/target tests/runtime.test.ts
       - name: Verify current server-only Quantum boundary and Desktop shell
         run: |
           node --check athlys-source/web/app.js
