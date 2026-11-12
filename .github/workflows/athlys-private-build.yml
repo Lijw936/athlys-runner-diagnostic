@@ -382,7 +382,7 @@ jobs:
               owner,
               repo,
               tag_name: `athlys-android-1.3.9-validation-${process.env.RUN_ID}-${process.env.RUN_ATTEMPT}`,
-              target_commitish: '${{ github.event.inputs.source_ref || 'feat/034-athlys-team-chat-cross-platform' }}',
+              target_commitish: '${{ github.event.inputs.source_ref || 'main' }}',
               name: 'Athlys Android 1.3.9 — validation privée',
               body: 'APK debug de validation interne. Messagerie d’équipe, splash natif Athlys et identité visuelle harmonisée. Cette release reste en brouillon dans le dépôt privé Athlys2 ; elle n’est pas destinée à la distribution publique.',
               draft: true,
@@ -400,6 +400,52 @@ jobs:
               }
             });
             core.notice('APK ajoutée à une release brouillon privée : ' + release.data.html_url);
+      - name: Publish Android APK to public Athlys downloads
+        if: env.ATHLYS_UPLOAD_ENABLED == 'true'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.ATHLYS_PRIVATE_UPLOAD_TOKEN }}
+          script: |
+            const fs = require('node:fs');
+            const crypto = require('node:crypto');
+            const owner = 'Lijw936';
+            const repo = 'Athlys-downloads';
+            const tag = 'athlys-android-latest';
+            const apkPath = 'android/app/build/outputs/apk/debug/app-debug.apk';
+            const apk = fs.readFileSync(apkPath);
+            const checksum = crypto.createHash('sha256').update(apk).digest('hex');
+            const name = 'Athlys Android 1.3.9 — dernière version de test';
+            const body = 'Athlys Mobile Android 1.3.9 (versionCode 10). Identité visuelle Athlys harmonisée, animation native d’ouverture et messagerie individuelle et de groupes d’équipe. Synchronisation Android Health Connect selon les autorisations accordées et les politiques d’arrière-plan du système. APK debug de test, non publiée sur Google Play et non signée avec une clé de production.';
+            try {
+              let release;
+              try {
+                release = (await github.rest.repos.getReleaseByTag({ owner, repo, tag })).data;
+              } catch (error) {
+                if (error.status !== 404) throw error;
+                release = (await github.rest.repos.createRelease({
+                  owner, repo, tag_name: tag, target_commitish: 'main',
+                  name, body, draft: false, prerelease: false
+                })).data;
+              }
+              for (const asset of (release.assets || []).filter(a => ['Athlys-Android.apk', 'SHA256SUMS.txt'].includes(a.name))) {
+                await github.rest.repos.deleteReleaseAsset({ owner, repo, asset_id: asset.id });
+              }
+              release = (await github.rest.repos.updateRelease({
+                owner, repo, release_id: release.id, name, body, draft: false, prerelease: false
+              })).data;
+              await github.rest.repos.uploadReleaseAsset({
+                owner, repo, release_id: release.id, name: 'Athlys-Android.apk', data: apk,
+                headers: { 'content-type': 'application/vnd.android.package-archive', 'content-length': apk.length }
+              });
+              const sums = Buffer.from(checksum + '  Athlys-Android.apk\n');
+              await github.rest.repos.uploadReleaseAsset({
+                owner, repo, release_id: release.id, name: 'SHA256SUMS.txt', data: sums,
+                headers: { 'content-type': 'text/plain', 'content-length': sums.length }
+              });
+              core.notice('Public Android release updated: ' + release.html_url);
+            } catch (error) {
+              core.warning('Public Android release upload did not complete: ' + (error.status || '') + ' ' + error.message);
+            }
       - name: Explain private artifact destination
         if: env.ATHLYS_UPLOAD_ENABLED != 'true'
         run: |
