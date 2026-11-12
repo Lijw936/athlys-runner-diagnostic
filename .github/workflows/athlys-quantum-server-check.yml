@@ -69,7 +69,7 @@ jobs:
         run: deno check index.ts
       - name: Test Scala validation, Scala scenario planning and Rust/JS parity
         working-directory: athlys-source/supabase/functions/athlys-quantum-analysis
-        run: deno test --allow-env --allow-read=rust-core/pkg tests/runtime.test.ts
+        run: deno test --allow-env --allow-read=./rust-core/pkg,./scala/target tests/runtime.test.ts
       - name: Test current remote-only browser boundary
         run: |
           node --check athlys-source/web/app.js
