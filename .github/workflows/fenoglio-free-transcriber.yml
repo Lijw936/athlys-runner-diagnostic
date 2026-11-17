@@ -1,0 +1,67 @@
+name: Fenoglio - transcription intégrale gratuite 2 heures
+on:
+  push:
+    paths:
+      - '.github/workflows/fenoglio-free-transcriber.yml'
+permissions:
+  contents: read
+jobs:
+  transcribe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 14
+    steps:
+      - name: Install browser automation
+        run: npm install --no-audit --no-fund playwright-core
+      - name: Submit full public video to free speech-to-text
+        run: |
+          cat > transcribe.cjs <<'JS'
+          const {chromium}=require('playwright-core');
+          const fs=require('fs');
+          (async()=>{
+            const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+            const context=await browser.newContext({acceptDownloads:true});
+            const page=await context.newPage();
+            const notes=[];
+            page.on('response',r=>{if(r.status()>=400&&!r.url().includes('google'))notes.push({status:r.status(),url:r.url().split('?')[0].slice(0,150)})});
+            await page.goto('https://freetranscriber.ai/',{waitUntil:'domcontentloaded',timeout:35000});
+            await page.waitForTimeout(2500);
+            console.log('INITIAL_TITLE',await page.title());
+            const link=page.getByRole('button',{name:'Link',exact:true});
+            console.log('LINKTAB',await link.count());
+            if(await link.count())await link.first().click();
+            await page.waitForTimeout(1000);
+            console.log('CURRENT_INPUTS',JSON.stringify(await page.locator('input').evaluateAll(xs=>xs.map(x=>({type:x.type,placeholder:x.placeholder,outer:x.outerHTML.slice(0,260)}))).catch(()=>[])));
+            console.log('CURRENT_BUTTONS',JSON.stringify((await page.locator('button').allInnerTexts()).filter(x=>x.trim()).slice(0,26)));
+            const inp=page.locator('input[type=url],input[placeholder*="YouTube"],input[placeholder*="link"],textarea[placeholder*="url"]').first();
+            if(!await inp.count()){console.log('NO_URL_INPUT');fs.writeFileSync('page_state.txt',await page.locator('body').innerText());await browser.close();return;}
+            await inp.fill('https://www.youtube.com/watch?v=3ul0LeBTKaE');
+            const start=page.locator('button').filter({hasText:/^\s*Transcribe\s*$/i});
+            console.log('TRANSCRIBE_BUTTONS',await start.count());
+            if(!await start.count()){console.log('NO_START');fs.writeFileSync('page_state.txt',await page.locator('body').innerText());await browser.close();return;}
+            await start.first().click({timeout:15000});
+            let best='',done=false;
+            for(let i=0;i<60;i++){
+              await page.waitForTimeout(10000);
+              const body=await page.locator('body').innerText().catch(()=>'');
+              if(body.length>best.length)best=body;
+              if(i%3===0)console.log('STATUS',i*10,'seconds','URL',page.url(),'TEXT_LEN',body.length,'TAIL',body.slice(-650));
+              fs.writeFileSync('page_state.txt',body);
+              if(/download transcript|copy transcript|download txt|export transcript|transcription complete|transcript ready/i.test(body)&&body.length>4500){done=true;break;}
+            }
+            console.log('FINISH',done,'URL',page.url(),'BEST_LENGTH',best.length,'ERRORS',JSON.stringify(notes.slice(-12)));
+            fs.writeFileSync('page_state.txt',best);
+            fs.writeFileSync('page_url.txt',page.url());
+            await browser.close();
+          })().catch(e=>{console.error('ERROR',String(e));process.exit(1)});
+          JS
+          node transcribe.cjs
+      - name: Store evidence and available transcript
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fenoglio-free-transcriber-result
+          path: |
+            page_state.txt
+            page_url.txt
+          if-no-files-found: warn
+          retention-days: 7
