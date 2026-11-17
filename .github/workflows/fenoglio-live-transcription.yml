@@ -1,4 +1,5 @@
 name: Fenoglio public live transcription
+# Third verification: expanded public clients, no authentication or cookies
 # Diagnostic retry: public YouTube playback clients; no login cookies
 
 on:
