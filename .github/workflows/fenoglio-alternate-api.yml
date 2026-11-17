@@ -1,0 +1,28 @@
+name: Fenoglio - inspect public alternate transcript services
+on:
+  push:
+    paths:
+      - '.github/workflows/fenoglio-alternate-api.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Inspect publicly documented frontend routes
+        run: |
+          python - <<'PY'
+          import requests,re,collections
+          for u in ['https://vidstill.com/assets/index-DFKWnC5b.js','https://whoscribe.ai/build/assets/app-CWUaM0bX.js']:
+            try:
+              r=requests.get(u,timeout=20); t=r.text
+              print('BUNDLE',u,r.status_code,len(t),flush=True)
+              hosts=collections.Counter(re.findall(r'https?://[a-zA-Z0-9.-]+',t))
+              print('HOSTS',hosts.most_common(45),flush=True)
+              for kw in ['transcribe','transcript','/api/','/trpc/','tRPC','createJob','videoUrl','video_url','downloadAudio','startDownload','youtube.com/watch','api.vidstill','supabase','convex','videoId']:
+                it=list(re.finditer(re.escape(kw),t,re.I))
+                fragments=[t[max(0,m.start()-90):m.start()+140].replace('\n',' ')[:230] for m in it[-5:]]
+                print('KW',kw,'COUNT',len(it),'SNIPPETS',fragments,flush=True)
+            except Exception as e:print('ERROR',u,str(e)[:200],flush=True)
+          PY
