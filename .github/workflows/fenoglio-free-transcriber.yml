@@ -35,7 +35,7 @@ jobs:
             const inp=page.locator('input[type=url],input[placeholder*="YouTube"],input[placeholder*="link"],textarea[placeholder*="url"]').first();
             if(!await inp.count()){console.log('NO_URL_INPUT');fs.writeFileSync('page_state.txt',await page.locator('body').innerText());await browser.close();return;}
             await inp.fill('https://www.youtube.com/watch?v=3ul0LeBTKaE');
-            const start=page.locator('button').filter({hasText:/^\s*Transcribe\s*$/i});
+            const start=page.locator('button').filter({hasText:/Get Transcript|Transcribe/i});
             console.log('TRANSCRIBE_BUTTONS',await start.count());
             if(!await start.count()){console.log('NO_START');fs.writeFileSync('page_state.txt',await page.locator('body').innerText());await browser.close();return;}
             await start.first().click({timeout:15000});
