@@ -1,0 +1,58 @@
+name: Fenoglio - test lecteur audio Chromium
+on:
+  push:
+    paths:
+      - '.github/workflows/fenoglio-browser-audio.yml'
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Chrome and Node
+        run: |
+          which google-chrome || true
+          google-chrome --version || true
+          node --version
+          npm install --no-audit --no-fund playwright-core
+      - name: Test genuine public browser playback
+        run: |
+          cat > probe.cjs <<'JS'
+          const {chromium}=require('playwright-core');
+          const fs=require('fs');
+          (async()=>{
+             const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox','--autoplay-policy=no-user-gesture-required','--use-fake-ui-for-media-stream','--disable-web-security']});
+             const page=await browser.newPage({viewport:{width:1280,height:720}});
+             page.on('console',m=>console.log('BROWSER:',m.text().slice(0,500)));
+             await page.goto('https://www.youtube.com/watch?v=3ul0LeBTKaE',{waitUntil:'domcontentloaded',timeout:40000});
+             await page.waitForTimeout(12000);
+             const info=await page.evaluate(async()=>{
+                const el=document.querySelector('video');
+                const playability=window.ytInitialPlayerResponse?.playabilityStatus?.status||'?';
+                const reason=window.ytInitialPlayerResponse?.playabilityStatus?.reason||'';
+                if(!el)return {playability,reason,video:false};
+                const result={playability,reason,video:true,readyState:el.readyState,currentTime:el.currentTime,duration:el.duration,paused:el.paused,canCapture:typeof el.captureStream==='function'};
+                try{await el.play();result.playOk=true;}catch(e){result.playError=String(e)}
+                await new Promise(resolve=>setTimeout(resolve,7000));
+                result.currentTimeAfter=el.currentTime;result.readyStateAfter=el.readyState;
+                if(typeof el.captureStream==='function'&&el.currentTime>1){
+                  const stream=el.captureStream();
+                  result.audioTracks=stream.getAudioTracks().length;
+                  result.videoTracks=stream.getVideoTracks().length;
+                }
+                return result;
+             });
+             console.log('PLAYBACK_PROBE',JSON.stringify(info));
+             fs.writeFileSync('browser_probe.json',JSON.stringify(info,null,2));
+             await browser.close();
+          })().catch(e=>{console.error(e);process.exit(1)});
+          JS
+          node probe.cjs
+      - name: Upload probe metadata
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fenoglio-browser-probe
+          path: browser_probe.json
+          if-no-files-found: warn
