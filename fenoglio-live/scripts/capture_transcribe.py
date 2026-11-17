@@ -24,10 +24,25 @@ def call(args,timeout):
     return subprocess.run(args,text=True,capture_output=True,timeout=timeout,check=False)
 
 def main():
-    fetch=call(["yt-dlp","--no-playlist","--no-warnings","-f","bestaudio/best","--get-url",URL],90)
-    if fetch.returncode or not fetch.stdout.strip():
-        raise RuntimeError("yt-dlp failed: "+fetch.stderr[-1200:])
-    stream=fetch.stdout.strip().splitlines()[-1]
+    # Try standard public playback clients without cookies or authentication.
+    clients=("default","android","ios","web","tv")
+    stream=None
+    for client in clients:
+        args=["yt-dlp","--no-playlist","--no-warnings","--no-cache-dir","-f","bestaudio/best"]
+        if client!="default":
+            args+=["--extractor-args",f"youtube:player_client={client}"]
+        args+=["--get-url",URL]
+        fetch=call(args,45)
+        status.setdefault("client_checks",[]).append({
+            "client":client,"ok":bool(fetch.returncode==0 and fetch.stdout.strip()),
+            "error":fetch.stderr[-600:] if fetch.returncode else ""
+        })
+        if fetch.returncode==0 and fetch.stdout.strip():
+            stream=fetch.stdout.strip().splitlines()[-1]
+            status["selected_client"]=client
+            break
+    if not stream:
+        raise RuntimeError("No public playback client returned an audio stream. Check client_checks in the status artifact.")
     ff=call(["ffmpeg","-nostdin","-hide_banner","-loglevel","error","-y","-i",stream,"-t",str(SECONDS),"-vn","-ac","1","-ar","16000",str(AUDIO)],SECONDS+120)
     if ff.returncode or not AUDIO.exists() or AUDIO.stat().st_size<32000:
         raise RuntimeError("ffmpeg failed: "+ff.stderr[-1200:])
