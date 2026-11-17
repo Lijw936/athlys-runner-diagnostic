@@ -1,0 +1,80 @@
+name: Fenoglio LCP - transcription de la captation publique
+on:
+  push:
+    paths:
+      - '.github/workflows/fenoglio-lcp.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  transcribe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Probe runner
+        run: |
+          python --version
+          ffmpeg -version | head -1
+          node --version
+      - name: Install tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install -U yt-dlp faster-whisper
+      - name: Download full LCP replay and check duration
+        env:
+          VIDEO_URL: https://www.youtube.com/watch?v=3ul0LeBTKaE
+        run: |
+          set -o pipefail
+          yt-dlp --js-runtimes node --remote-components ejs:github --no-playlist -f 'bestaudio/best' -o 'fenoglio-lcp.%(ext)s' "$VIDEO_URL" 2>&1 | tee extraction.log
+          F=$(find . -maxdepth 1 -type f -name 'fenoglio-lcp.*' ! -name '*.part' | head -1)
+          test -n "$F"
+          ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "$F" | tee duration.txt
+          echo "MEDIA_FILE=$F" >> "$GITHUB_ENV"
+      - name: Transcribe audio, timecoded every 10 minutes
+        env:
+          TOKENIZERS_PARALLELISM: 'false'
+        run: |
+          cat > /tmp/transcribe_fenoglio.py <<'PY'
+          import os,json,math,subprocess,pathlib
+          from faster_whisper import WhisperModel
+          f=os.environ['MEDIA_FILE']
+          dur=float(pathlib.Path('duration.txt').read_text().strip())
+          print('DURATION_SECONDS',dur,flush=True)
+          m=WhisperModel('base',device='cpu',compute_type='int8',cpu_threads=2,num_workers=1)
+          segs=[]
+          for i in range(math.ceil(dur/600)):
+              start=i*600
+              end=min(dur,start+600)
+              cl=f'/tmp/lcp_part_{i:03d}.wav'
+              subprocess.run(['ffmpeg','-nostdin','-hide_banner','-loglevel','error','-y','-ss',str(start),'-i',f,'-t',str(end-start),'-vn','-ar','16000','-ac','1',cl],check=True)
+              iterator,_=m.transcribe(cl,language='fr',beam_size=1,vad_filter=True,condition_on_previous_text=False)
+              chunk=[]
+              for s in iterator:
+                  line={'start':round(start+s.start,2),'end':round(start+s.end,2),'text':s.text.strip()}
+                  segs.append(line);chunk.append(line)
+              pathlib.Path(f'transcript_part_{i:02d}.json').write_text(json.dumps(chunk,ensure_ascii=False,indent=2))
+              os.remove(cl)
+              print('PART_COMPLETED',i,'S',round(start),'E',round(end),'SEGMENTS',len(chunk),flush=True)
+          pathlib.Path('transcript_full.json').write_text(json.dumps(segs,ensure_ascii=False,indent=2))
+          def fmt(t):
+              t=int(t)
+              return f'{t//3600:02d}:{(t%3600)//60:02d}:{t%60:02d}'
+          pathlib.Path('transcript_full.txt').write_text('\n'.join(f'[{fmt(v["start"])}] {v["text"]}' for v in segs),encoding='utf-8')
+          pathlib.Path('evidence.json').write_text(json.dumps({'video_url':'https://www.youtube.com/watch?v=3ul0LeBTKaE','decoded_duration_seconds':dur,'segments':len(segs),'asr_model':'base','human_verified':False},indent=2),encoding='utf-8')
+          print('TRANSCRIPT_DONE',len(segs),dur,flush=True)
+          PY
+          python /tmp/transcribe_fenoglio.py
+      - name: Publish transcript artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fenoglio-lcp-transcription
+          path: |
+            extraction.log
+            duration.txt
+            evidence.json
+            transcript_full.json
+            transcript_full.txt
+            transcript_part_*.json
+          if-no-files-found: warn
+          retention-days: 7
