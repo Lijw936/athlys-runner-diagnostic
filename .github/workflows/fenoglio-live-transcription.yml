@@ -1,6 +1,10 @@
 name: Fenoglio public live transcription
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/fenoglio-live-transcription.yml'
   workflow_dispatch:
     inputs:
       capture_seconds:
