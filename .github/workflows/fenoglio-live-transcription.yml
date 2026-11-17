@@ -1,0 +1,64 @@
+name: Fenoglio public live transcription
+
+on:
+  workflow_dispatch:
+    inputs:
+      capture_seconds:
+        description: "Capture seconds (max 1500)"
+        required: false
+        default: "600"
+      model:
+        description: "Whisper model tiny/base/small"
+        required: false
+        default: "base"
+  schedule:
+    - cron: "0,30 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: fenoglio-live-capture
+  cancel-in-progress: false
+
+jobs:
+  transcribe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - id: gate
+        name: Scheduled execution only during event dates
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+          elif [[ "$(date -u +%Y-%m-%d)" == '2026-11-17' || "$(date -u +%Y-%m-%d)" == '2026-11-18' ]]; then
+            echo 'run=true' >> "$GITHUB_OUTPUT"
+          else
+            echo 'run=false' >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.run == 'true'
+      - name: Install audio tools
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+          python -m pip install -r fenoglio-live/requirements.txt
+      - name: Capture and transcribe
+        if: steps.gate.outputs.run == 'true'
+        env:
+          CAPTURE_SECONDS: ${{ inputs.capture_seconds || '600' }}
+          WHISPER_MODEL: ${{ inputs.model || 'base' }}
+          VIDEO_URL: https://www.youtube.com/watch?v=6NS1eB8Agsg
+        run: |
+          cd fenoglio-live
+          python scripts/capture_transcribe.py
+      - name: Upload outputs even if capture fails
+        if: always() && steps.gate.outputs.run == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: fenoglio-verification-${{ github.run_id }}
+          path: fenoglio-live/output/
+          retention-days: 7
+          if-no-files-found: warn
