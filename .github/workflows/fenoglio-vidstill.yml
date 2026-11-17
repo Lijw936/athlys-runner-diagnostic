@@ -1,0 +1,46 @@
+name: Fenoglio - test téléchargement via lecteur tiers
+on:
+  push:
+    paths:
+      - '.github/workflows/fenoglio-vidstill.yml'
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prepare Chromium
+        run: npm install --no-audit --no-fund playwright-core
+      - name: Verify standard guest download flow
+        run: |
+          cat > probe.cjs <<'JS'
+          const {chromium}=require('playwright-core');
+          const fs=require('fs');
+          (async()=>{
+           const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
+           const context=await browser.newContext({acceptDownloads:true});
+           const page=await context.newPage();
+           page.on('response',r=>{try{if(r.url().includes('vidstill.com')&&(r.url().includes('_serverFn')||r.status()>=400)) console.log('FETCH',r.status(),r.url().split('?')[0].slice(0,180));}catch(e){}});
+           page.on('console',m=>{if(m.type()==='error')console.log('CLIENT-ERROR',m.text().slice(0,280))});
+           await page.goto('https://vidstill.com/?video='+encodeURIComponent('https://www.youtube.com/watch?v=3ul0LeBTKaE'),{waitUntil:'domcontentloaded',timeout:30000});
+           await page.waitForTimeout(4500);
+           console.log('INITIAL',page.url(),(await page.locator('body').innerText()).slice(0,1100));
+           const form=page.locator('form').first();
+           console.log('FORM',await form.count(),await form.locator('button').allInnerTexts());
+           const submit=form.locator('button').last();
+           await submit.click({timeout:7000});
+           await page.waitForTimeout(25000);
+           const data=await page.evaluate(()=>({url:location.href,text:document.body.innerText.slice(0,5500),links:[...document.querySelectorAll('a[href]')].map(x=>({text:x.innerText.slice(0,70),href:x.href.slice(0,180)})).filter(x=>/download|\.mp3|\.mp4|youtube|href=|file/i.test(x.text+' '+x.href)).slice(0,25)}));
+           console.log('RESULT',JSON.stringify(data));
+           fs.writeFileSync('vidstill_state.json',JSON.stringify(data,null,2));
+           await browser.close();
+          })().catch(e=>{console.error('FAILED',String(e));process.exit(1)});
+          JS
+          node probe.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fenoglio-vidstill-browser-state
+          path: vidstill_state.json
+          if-no-files-found: warn
