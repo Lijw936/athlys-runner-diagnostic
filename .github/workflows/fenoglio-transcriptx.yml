@@ -1,0 +1,60 @@
+name: Fenoglio - TranscriptX anonymous video to text
+on:
+  push:
+    paths:
+      - '.github/workflows/fenoglio-transcriptx.yml'
+permissions:
+  contents: read
+jobs:
+  transcribe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Prepare browser
+        run: npm install --no-fund --no-audit playwright-core
+      - name: Transcribe public LCP video as offered
+        run: |
+          cat > transcribe.cjs <<'JS'
+          const {chromium}=require('playwright-core');
+          const fs=require('fs');
+          (async()=>{
+            const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox','--disable-dev-shm-usage']});
+            const context=await browser.newContext({acceptDownloads:true});
+            const page=await context.newPage();
+            const bad=[];
+            page.on('response',x=>{if(x.status()>=400&&x.url().includes('transcriptx.ai'))bad.push({status:x.status(),url:x.url().split('?')[0].slice(0,130)})});
+            await page.goto('https://transcriptx.ai/',{waitUntil:'domcontentloaded',timeout:45000});
+            await page.waitForTimeout(3500);
+            console.log('OPEN',page.url(),await page.title());
+            console.log('BUTTONS',JSON.stringify((await page.locator('button').allInnerTexts()).filter(x=>x.trim()).slice(0,20)));
+            const input=page.locator('input[placeholder*="video link"]').first();
+            console.log('LINK_INPUT',await input.count());
+            if(!await input.count())throw new Error('URL input missing');
+            await input.fill('https://www.youtube.com/watch?v=3ul0LeBTKaE');
+            const button=page.getByText('Generate Transcript',{exact:true});
+            console.log('SUBMIT_BUTTON',await button.count());
+            await button.first().click({timeout:9000});
+            for(let i=0;i<68;i++){
+              await page.waitForTimeout(10000);
+              const body=await page.locator('body').innerText().catch(()=>'');
+              fs.writeFileSync('transcriptx_status.txt',body);
+              if(i%3===0)console.log('PROGRESS',i*10,'URL',page.url(),'LEN',body.length,'TAIL',body.slice(-700));
+              if(/download transcript|export transcript|transcript complete|download srt|download vtt/i.test(body)&&body.length>4600){break}
+            }
+            const body=await page.locator('body').innerText();
+            console.log('FINAL',page.url(),'LEN',body.length,'ERRORS',JSON.stringify(bad.slice(-10)),'TAIL',body.slice(-1200));
+            fs.writeFileSync('transcriptx_status.txt',body);
+            fs.writeFileSync('transcriptx_url.txt',page.url());
+            await browser.close();
+          })().catch(e=>{console.error('FAILED',String(e));process.exit(1)});
+          JS
+          node transcribe.cjs
+      - name: Preserve result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: fenoglio-transcriptx-result
+          path: |
+            transcriptx_status.txt
+            transcriptx_url.txt
+          if-no-files-found: warn
