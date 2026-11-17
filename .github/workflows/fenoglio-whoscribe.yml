@@ -1,0 +1,46 @@
+name: Fenoglio - test transcription publique 15 minutes
+on:
+  push:
+    paths:
+      - '.github/workflows/fenoglio-whoscribe.yml'
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Prepare Chromium
+        run: npm install --no-audit --no-fund playwright-core
+      - name: Request only published free demo
+        run: |
+          cat > probe.cjs <<'JS'
+          const {chromium}=require('playwright-core');
+          const fs=require('fs');
+          (async()=>{
+             const browser=await chromium.launch({executablePath:'/usr/bin/google-chrome',headless:true,args:['--no-sandbox']});
+             const page=await browser.newPage();
+             page.on('response',r=>{if(r.status()>=400&&r.url().includes('whoscribe.ai'))console.log('ERROR_STATUS',r.status(),r.url().split('?')[0].slice(0,100))});
+             await page.goto('https://whoscribe.ai/fr/transcription-youtube',{waitUntil:'domcontentloaded',timeout:30000});
+             await page.waitForTimeout(2500);
+             const u=page.locator('input[type=url]').first();
+             await u.fill('https://www.youtube.com/watch?v=3ul0LeBTKaE');
+             const buttons=await page.locator('button').allInnerTexts();
+             console.log('BUTTONS',buttons.filter(Boolean).slice(0,22));
+             const trans=page.getByRole('button',{name:/transcrire/i}).first();
+             console.log('TRANSCRIBE',await trans.count());
+             if(await trans.count())await trans.click({timeout:6000});
+             await page.waitForTimeout(35000);
+             const data=await page.evaluate(()=>({url:location.href,title:document.title,text:document.body.innerText.slice(0,6500),links:[...document.querySelectorAll('a[href]')].map(x=>({text:x.innerText.slice(0,40),url:x.href.slice(0,170)})).filter(x=>/transcript|\bfile\b|t%C3%A9l%C3%A9charger|video|jobs/i.test(x.text+' '+x.url)).slice(0,20)}));
+             console.log('FINAL_STATE',JSON.stringify(data));
+             fs.writeFileSync('whoscribe_probe.json',JSON.stringify(data,null,2));
+             await browser.close();
+          })().catch(e=>{console.error('FAILED',String(e));process.exit(1)});
+          JS
+          node probe.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fenoglio-whoscribe-probe
+          path: whoscribe_probe.json
+          if-no-files-found: warn
