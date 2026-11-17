@@ -25,7 +25,7 @@ def call(args,timeout):
 
 def main():
     # Try standard public playback clients without cookies or authentication.
-    clients=("default","android","ios","web","tv")
+    clients=("default","android","ios","web","tv","web_safari","mweb","android_vr","tv_embedded")
     stream=None
     for client in clients:
         args=["yt-dlp","--no-playlist","--no-warnings","--no-cache-dir","-f","bestaudio/best"]
@@ -42,6 +42,7 @@ def main():
             status["selected_client"]=client
             break
     if not stream:
+        for item in status.get("client_checks",[]): print("CLIENT_DIAGNOSTIC",item["client"],item["error"][-350:],file=sys.stderr)
         raise RuntimeError("No public playback client returned an audio stream. Check client_checks in the status artifact.")
     ff=call(["ffmpeg","-nostdin","-hide_banner","-loglevel","error","-y","-i",stream,"-t",str(SECONDS),"-vn","-ac","1","-ar","16000",str(AUDIO)],SECONDS+120)
     if ff.returncode or not AUDIO.exists() or AUDIO.stat().st_size<32000:
