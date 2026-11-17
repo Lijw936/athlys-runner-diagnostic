@@ -26,14 +26,14 @@ jobs:
              const page=await browser.newPage({viewport:{width:1280,height:720}});
              page.on('console',m=>console.log('BROWSER:',m.text().slice(0,500)));
              await page.goto('https://www.youtube.com/watch?v=3ul0LeBTKaE',{waitUntil:'domcontentloaded',timeout:40000});
-             await page.waitForTimeout(12000);
+             await page.waitForTimeout(7000);
              const info=await page.evaluate(async()=>{
                 const el=document.querySelector('video');
                 const playability=window.ytInitialPlayerResponse?.playabilityStatus?.status||'?';
                 const reason=window.ytInitialPlayerResponse?.playabilityStatus?.reason||'';
                 if(!el)return {playability,reason,video:false};
                 const result={playability,reason,video:true,readyState:el.readyState,currentTime:el.currentTime,duration:el.duration,paused:el.paused,canCapture:typeof el.captureStream==='function'};
-                try{await el.play();result.playOk=true;}catch(e){result.playError=String(e)}
+                try{await Promise.race([el.play(),new Promise((_,reject)=>setTimeout(()=>reject(new Error('play timeout')),6000))]);result.playOk=true;}catch(e){result.playError=String(e)}
                 await new Promise(resolve=>setTimeout(resolve,7000));
                 result.currentTimeAfter=el.currentTime;result.readyStateAfter=el.readyState;
                 if(typeof el.captureStream==='function'&&el.currentTime>1){
